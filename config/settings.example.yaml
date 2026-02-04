@@ -1,0 +1,33 @@
+# Instagram Trend Reporter 설정 예제
+# 이 파일을 settings.yaml로 복사 후 수정하세요
+
+# Apify 설정
+apify:
+  token: "your_apify_token_here"
+
+# 분석 대상 계정
+accounts:
+  - username: account1
+    category: Fashion
+  - username: account2
+    category: Fashion
+
+# 분석 설정
+analysis:
+  days: 7                    # 분석 기간 (일)
+  content_type: reels        # posts, reels, stories
+  limit_per_account: 50      # 계정당 최대 수집 개수
+  outlier_threshold: 2.0     # 아웃라이어 임계값 (표준편차)
+  top_hashtags: 50           # Top 해시태그 개수
+  top_viral: 7               # Top 바이럴 콘텐츠 개수
+
+# 이메일 수신자
+email:
+  recipients:
+    - you@example.com
+
+# Google OAuth
+google:
+  config_path: ~/.config/agent-skills/google.yaml
+  gmail_token_key: gmail-token-json
+  sheets_token_key: google-sheets-token-json

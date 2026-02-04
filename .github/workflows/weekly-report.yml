@@ -1,0 +1,107 @@
+name: 📊 인스타그램 주간 트렌드 리포트
+
+on:
+  # 매주 월요일 오전 8시 (KST) = 일요일 23시 (UTC)
+  schedule:
+    - cron: '0 23 * * 0'
+  
+  # 수동 실행 버튼 활성화
+  workflow_dispatch:
+    inputs:
+      days:
+        description: '분석 기간 (일)'
+        required: false
+        default: '7'
+      send_email:
+        description: '이메일 전송'
+        type: boolean
+        default: true
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 코드 체크아웃
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 의존성 설치
+        run: pip install -r requirements.txt
+      
+      - name: ⚙️ 설정 파일 생성
+        run: |
+          mkdir -p config
+          cat > config/settings.yaml << EOF
+          apify:
+            token: "${{ secrets.APIFY_TOKEN }}"
+          
+          accounts:
+            - username: dip_magazine
+              category: Fashion
+            - username: the_edit.co.kr
+              category: Fashion
+            - username: on_fleekkk
+              category: Fashion
+            - username: fashionandstyle.official
+              category: Fashion
+            - username: luxmag.kr
+              category: Fashion
+            - username: histofit
+              category: Fashion
+          
+          analysis:
+            days: ${{ github.event.inputs.days || '7' }}
+            content_type: reels
+            limit_per_account: 50
+            outlier_threshold: 2.0
+            top_hashtags: 50
+            top_viral: 7
+          
+          email:
+            recipients:
+              - dedurox@gmail.com
+              - kimdh@lfcorp.com
+          
+          google:
+            config_path: /tmp/google.yaml
+            gmail_token_key: gmail-token-json
+            sheets_token_key: google-sheets-token-json
+          EOF
+      
+      - name: 🔑 Google OAuth 설정
+        run: |
+          cat > /tmp/google.yaml << EOF
+          oauth_client:
+            client_id: "${{ secrets.GOOGLE_CLIENT_ID }}"
+            client_secret: "${{ secrets.GOOGLE_CLIENT_SECRET }}"
+          EOF
+      
+      - name: 🔐 토큰 복원
+        run: |
+          # keyring 대신 환경변수로 토큰 전달
+          echo "GMAIL_TOKEN=${{ secrets.GMAIL_TOKEN }}" >> $GITHUB_ENV
+          echo "SHEETS_TOKEN=${{ secrets.SHEETS_TOKEN }}" >> $GITHUB_ENV
+      
+      - name: 🚀 리포트 생성
+        run: |
+          if [ "${{ github.event.inputs.send_email }}" = "false" ]; then
+            python main.py run --no-email
+          else
+            python main.py run
+          fi
+        env:
+          GMAIL_TOKEN: ${{ secrets.GMAIL_TOKEN }}
+          SHEETS_TOKEN: ${{ secrets.SHEETS_TOKEN }}
+      
+      - name: 📋 결과 요약
+        run: |
+          echo "## 📊 리포트 생성 완료!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 분석 기간: ${{ github.event.inputs.days || '7' }}일" >> $GITHUB_STEP_SUMMARY
+          echo "- 실행 시간: $(date '+%Y-%m-%d %H:%M:%S KST')" >> $GITHUB_STEP_SUMMARY

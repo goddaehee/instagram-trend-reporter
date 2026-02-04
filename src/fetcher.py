@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from apify_client import ApifyClient
 
 from .config import get_config, Config
+from .credentials import get_apify_token
 
 
 class InstagramFetcher:
@@ -12,7 +13,11 @@ class InstagramFetcher:
     
     def __init__(self, config: Optional[Config] = None):
         self.config = config or get_config()
-        self.client = ApifyClient(self.config.apify_token)
+        # 환경변수/Secrets에서 토큰 우선 확인
+        apify_token = get_apify_token() or self.config.apify_token
+        if not apify_token:
+            raise ValueError("APIFY_TOKEN이 설정되지 않았습니다.")
+        self.client = ApifyClient(apify_token)
     
     def fetch_profiles(self, usernames: List[str]) -> Dict[str, Any]:
         """프로필 데이터 수집"""

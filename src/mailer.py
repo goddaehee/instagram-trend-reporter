@@ -5,7 +5,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional, List, Dict, Any
 import yaml
-import keyring
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -13,6 +12,7 @@ from googleapiclient.discovery import build
 
 from .config import get_config, Config
 from .analyzer import AnalysisResult
+from .credentials import get_token, save_token, get_google_oauth_config, is_cloud_environment
 
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
@@ -27,7 +27,7 @@ class GmailSender:
     
     def _get_credentials(self) -> Credentials:
         """Gmail 인증 정보 획득"""
-        token_json = keyring.get_password("agent-skills", self.config.gmail_token_key)
+        token_json = get_token("gmail")
         
         creds = None
         if token_json:
@@ -39,14 +39,20 @@ class GmailSender:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
+                save_token("gmail", creds.to_json())
             else:
-                with open(self.config.google_config_path) as f:
-                    google_config = yaml.safe_load(f)
+                # 클라우드 환경에서는 토큰이 필수
+                if is_cloud_environment():
+                    raise ValueError("GMAIL_TOKEN이 설정되지 않았습니다. Streamlit Secrets에 토큰을 추가하세요.")
+                
+                client_id, client_secret = get_google_oauth_config()
+                if not client_id:
+                    raise ValueError("Google OAuth 설정을 찾을 수 없습니다.")
                 
                 client_config = {
                     "installed": {
-                        "client_id": google_config["oauth_client"]["client_id"],
-                        "client_secret": google_config["oauth_client"]["client_secret"],
+                        "client_id": client_id,
+                        "client_secret": client_secret,
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                         "token_uri": "https://oauth2.googleapis.com/token",
                         "redirect_uris": ["http://localhost"]
@@ -54,8 +60,8 @@ class GmailSender:
                 }
                 flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
                 creds = flow.run_local_server(port=0)
-            
-            keyring.set_password("agent-skills", self.config.gmail_token_key, creds.to_json())
+                
+                save_token("gmail", creds.to_json())
         
         return creds
     

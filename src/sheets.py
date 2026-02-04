@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 from typing import Optional, Dict, Any
 import yaml
-import keyring
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -12,9 +11,13 @@ from googleapiclient.discovery import build
 
 from .config import get_config, Config
 from .analyzer import AnalysisResult
+from .credentials import get_token, save_token, get_google_oauth_config, is_cloud_environment
 
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",  # 권한 설정용
+]
 
 
 class SheetsReporter:
@@ -45,7 +48,7 @@ class SheetsReporter:
     def _get_credentials(self) -> Credentials:
         """Google 인증 정보 획득"""
         # 저장된 토큰 확인
-        token_json = keyring.get_password("agent-skills", self.config.sheets_token_key)
+        token_json = get_token("sheets")
         
         creds = None
         if token_json:
@@ -57,15 +60,22 @@ class SheetsReporter:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
+                # 갱신된 토큰 저장
+                save_token("sheets", creds.to_json())
             else:
+                # 클라우드 환경에서는 토큰이 필수
+                if is_cloud_environment():
+                    raise ValueError("SHEETS_TOKEN이 설정되지 않았습니다. Streamlit Secrets에 토큰을 추가하세요.")
+                
                 # OAuth 설정 로드
-                with open(self.config.google_config_path) as f:
-                    google_config = yaml.safe_load(f)
+                client_id, client_secret = get_google_oauth_config()
+                if not client_id:
+                    raise ValueError("Google OAuth 설정을 찾을 수 없습니다.")
                 
                 client_config = {
                     "installed": {
-                        "client_id": google_config["oauth_client"]["client_id"],
-                        "client_secret": google_config["oauth_client"]["client_secret"],
+                        "client_id": client_id,
+                        "client_secret": client_secret,
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                         "token_uri": "https://oauth2.googleapis.com/token",
                         "redirect_uris": ["http://localhost"]
@@ -73,9 +83,9 @@ class SheetsReporter:
                 }
                 flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
                 creds = flow.run_local_server(port=0)
-            
-            # 토큰 저장
-            keyring.set_password("agent-skills", self.config.sheets_token_key, creds.to_json())
+                
+                # 토큰 저장
+                save_token("sheets", creds.to_json())
         
         return creds
     
@@ -85,6 +95,28 @@ class SheetsReporter:
             creds = self._get_credentials()
             self.service = build("sheets", "v4", credentials=creds)
         return self.service
+    
+    def _get_drive_service(self):
+        """Drive API 서비스 객체 (권한 설정용)"""
+        creds = self._get_credentials()
+        return build("drive", "v3", credentials=creds)
+    
+    def set_public_permission(self, spreadsheet_id: str):
+        """스프레드시트를 '링크가 있는 모든 사용자 > 뷰어'로 설정"""
+        drive_service = self._get_drive_service()
+        
+        permission = {
+            "type": "anyone",
+            "role": "reader",
+        }
+        
+        drive_service.permissions().create(
+            fileId=spreadsheet_id,
+            body=permission,
+            fields="id",
+        ).execute()
+        
+        print("  → 공개 권한 설정 완료 (링크가 있는 모든 사용자 > 뷰어)")
     
     def create_spreadsheet(self, title: str) -> str:
         """새 스프레드시트 생성"""
@@ -169,6 +201,9 @@ class SheetsReporter:
         ]
         self.write_values(spreadsheet_id, "리포트정보!A1", report_info)
         print(f"  → 리포트정보 시트 작성 완료")
+        
+        # 공개 권한 설정
+        self.set_public_permission(spreadsheet_id)
         
         url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
         

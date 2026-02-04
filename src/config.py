@@ -5,6 +5,21 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+# 기본 계정 목록 (Streamlit Cloud용)
+DEFAULT_ACCOUNTS = [
+    {"username": "dip_magazine", "category": "Fashion"},
+    {"username": "the_edit.co.kr", "category": "Fashion"},
+    {"username": "on_fleekkk", "category": "Fashion"},
+    {"username": "fashionandstyle.official", "category": "Fashion"},
+    {"username": "luxmag.kr", "category": "Fashion"},
+    {"username": "histofit", "category": "Fashion"},
+]
+
+DEFAULT_EMAIL_RECIPIENTS = [
+    "dedurox@gmail.com",
+    "kimdh@lfcorp.com",
+]
+
 
 @dataclass
 class Account:
@@ -33,10 +48,38 @@ class Config:
     sheets_token_key: str
     
     @classmethod
+    def load_from_secrets(cls) -> "Config":
+        """Streamlit secrets에서 설정 로드 (클라우드 환경용)"""
+        try:
+            import streamlit as st
+            apify_token = st.secrets.get("APIFY_TOKEN", os.environ.get("APIFY_TOKEN", ""))
+        except:
+            apify_token = os.environ.get("APIFY_TOKEN", "")
+        
+        accounts = [
+            Account(username=a["username"], category=a.get("category", "general"))
+            for a in DEFAULT_ACCOUNTS
+        ]
+        
+        return cls(
+            apify_token=apify_token,
+            accounts=accounts,
+            analysis=AnalysisConfig(),
+            email_recipients=DEFAULT_EMAIL_RECIPIENTS,
+            google_config_path="",
+            gmail_token_key="gmail-token-json",
+            sheets_token_key="google-sheets-token-json",
+        )
+    
+    @classmethod
     def load(cls, config_path: Optional[str] = None) -> "Config":
-        """설정 파일 로드"""
+        """설정 파일 로드 (파일 없으면 secrets에서 로드)"""
         if config_path is None:
             config_path = Path(__file__).parent.parent / "config" / "settings.yaml"
+        
+        # 파일이 없으면 Streamlit secrets에서 로드
+        if not Path(config_path).exists():
+            return cls.load_from_secrets()
         
         with open(config_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)

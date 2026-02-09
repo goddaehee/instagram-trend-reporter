@@ -127,16 +127,41 @@ class InstagramAnalyzer:
     def analyze_hashtags(self, posts: List[Dict[str, Any]]) -> List[HashtagStats]:
         """해시태그 분석 - Top N개 반환"""
         hashtag_data = defaultdict(lambda: {"count": 0, "total_engagement": 0})
-        
+        exclude_set = {t.lower() for t in self.config.analysis.exclude_hashtags}
+
+        posts_with_caption = 0
+        posts_with_hashtags = 0
+        total_hashtags_found = 0
+        excluded_count = 0
+        excluded_tags_detail = defaultdict(int)
+
         for post in posts:
             caption = post.get("caption", "") or ""
+            if caption.strip():
+                posts_with_caption += 1
             engagement = self.calc_engagement(post)
-            
-            # 해시태그 추출
+
+            # 해시태그 추출 (대소문자 통합)
             hashtags = re.findall(r'#(\w+)', caption)
+            if hashtags:
+                posts_with_hashtags += 1
+            total_hashtags_found += len(hashtags)
             for tag in hashtags:
-                hashtag_data[tag]["count"] += 1
-                hashtag_data[tag]["total_engagement"] += engagement
+                tag_lower = tag.lower()
+                if tag_lower in exclude_set:
+                    excluded_count += 1
+                    excluded_tags_detail[tag_lower] += 1
+                    continue
+                hashtag_data[tag_lower]["count"] += 1
+                hashtag_data[tag_lower]["total_engagement"] += engagement
+
+        print(f"  📊 해시태그 진단: 전체 {len(posts)}개 포스트")
+        print(f"     캡션 있음: {posts_with_caption}개 ({posts_with_caption*100//max(len(posts),1)}%)")
+        print(f"     해시태그 포함: {posts_with_hashtags}개 ({posts_with_hashtags*100//max(len(posts),1)}%)")
+        print(f"     해시태그 총 발견: {total_hashtags_found}개 → 제외 필터: {excluded_count}개 → 고유 태그: {len(hashtag_data)}개")
+        if excluded_tags_detail:
+            excluded_list = ", ".join(f"#{k}({v})" for k, v in sorted(excluded_tags_detail.items(), key=lambda x: x[1], reverse=True))
+            print(f"     🚫 제외된 태그: {excluded_list}")
         
         # 핫스코어 계산 및 정렬
         result = []
@@ -206,12 +231,17 @@ class InstagramAnalyzer:
     def generate_insights(self, hashtags: List[HashtagStats], viral: List[ViralContent]) -> List[Insight]:
         """인사이트 자동 생성"""
         insights = []
-        
+
+        if not hashtags and not viral:
+            insights.append(Insight(
+                number=1,
+                title="데이터 부족",
+                description="수집된 데이터가 충분하지 않아 인사이트를 생성할 수 없습니다. 수집 기간이나 계정 수를 늘려보세요.",
+                keywords="데이터 부족",
+            ))
+            return insights
+
         # 인사이트 1: Top 해시태그 분석
-        top_tags = [h.tag for h in hashtags[:5]]
-        top_categories = [h.category for h in hashtags[:10]]
-        dominant_category = max(set(top_categories), key=top_categories.count)
-        
         category_names = {
             "celeb": "셀럽/아이돌",
             "brand": "브랜드",
@@ -219,14 +249,28 @@ class InstagramAnalyzer:
             "item": "패션 아이템",
             "general": "일반"
         }
+
+        if hashtags:
+            top_tags = [h.tag for h in hashtags[:5]]
+            top_categories = [h.category for h in hashtags[:10]]
+            dominant_category = max(set(top_categories), key=top_categories.count)
+
+            insights.append(Insight(
+                number=1,
+                title=f"{category_names.get(dominant_category, '일반')} 콘텐츠 강세",
+                description=f"상위 10개 해시태그 중 {category_names.get(dominant_category)} 관련이 다수. Top 해시태그: {', '.join(top_tags[:3])}",
+                keywords=", ".join(top_tags[:4]),
+            ))
         
-        insights.append(Insight(
-            number=1,
-            title=f"{category_names.get(dominant_category, '일반')} 콘텐츠 강세",
-            description=f"상위 10개 해시태그 중 {category_names.get(dominant_category)} 관련이 다수. Top 해시태그: {', '.join(top_tags[:3])}",
-            keywords=", ".join(top_tags[:4]),
-        ))
-        
+        # 인사이트 1-b: 해시태그 없을 때 대체 인사이트
+        if not hashtags:
+            insights.append(Insight(
+                number=1,
+                title="해시태그 미사용 콘텐츠",
+                description="수집된 콘텐츠에 해시태그가 포함되지 않았습니다. 해시태그 없는 릴스/포스트 위주로 수집된 것으로 보입니다.",
+                keywords="해시태그 없음",
+            ))
+
         # 인사이트 2: 바이럴 콘텐츠 분석
         if viral:
             top_viral = viral[0]
@@ -276,26 +320,55 @@ class InstagramAnalyzer:
         """전체 분석 실행"""
         posts = data.get("posts", [])
         metadata = data.get("metadata", {})
-        
+
         print(f"분석 시작: {len(posts)}개 포스트")
-        
+
+        if not posts:
+            print("  ⚠️ 수집된 포스트가 없습니다. 빈 결과를 반환합니다.")
+            if self.config.analysis.start_date and self.config.analysis.end_date:
+                period = f"{self.config.analysis.start_date} ~ {self.config.analysis.end_date}"
+            else:
+                from datetime import timedelta
+                days = metadata.get("days", self.config.analysis.days)
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=days)
+                period = f"{start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}"
+            return AnalysisResult(
+                total_posts=0,
+                analysis_period=period,
+                accounts=metadata.get("accounts", []),
+                top_hashtags=[],
+                top_viral=[],
+                insights=[Insight(
+                    number=1,
+                    title="데이터 수집 실패",
+                    description="인스타그램에서 데이터를 수집하지 못했습니다. 네트워크 상태나 API 토큰을 확인해주세요.",
+                    keywords="수집 실패",
+                )],
+                generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            )
+
         # 해시태그 분석
         hashtags = self.analyze_hashtags(posts)
         print(f"  → Top {len(hashtags)} 해시태그 추출")
-        
+
         # 바이럴 콘텐츠
         viral = self.find_viral_content(posts)
         print(f"  → Top {len(viral)} 바이럴 콘텐츠 추출")
-        
+
         # 인사이트 생성
         insights = self.generate_insights(hashtags, viral)
         print(f"  → {len(insights)}개 인사이트 생성")
-        
+
         # 분석 기간 문자열
-        days = metadata.get("days", self.config.analysis.days)
-        end_date = datetime.now()
-        start_date = end_date - __import__("datetime").timedelta(days=days)
-        period = f"{start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}"
+        if self.config.analysis.start_date and self.config.analysis.end_date:
+            period = f"{self.config.analysis.start_date} ~ {self.config.analysis.end_date}"
+        else:
+            from datetime import timedelta
+            days = metadata.get("days", self.config.analysis.days)
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days)
+            period = f"{start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}"
         
         return AnalysisResult(
             total_posts=len(posts),

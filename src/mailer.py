@@ -3,6 +3,7 @@ import base64
 import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from typing import Optional, List, Dict, Any
 import yaml
 from google.oauth2.credentials import Credentials
@@ -13,6 +14,8 @@ from googleapiclient.discovery import build
 from .config import get_config, Config
 from .analyzer import AnalysisResult
 from .credentials import get_token, save_token, get_google_oauth_config, is_cloud_environment
+from .visualization.email_template import create_html_email
+from .visualization.email_charts import create_email_hashtag_chart, create_email_category_pie
 
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
@@ -143,7 +146,62 @@ class GmailSender:
         ).execute()
         
         return result
-    
+
+    def create_html_report_message(
+        self,
+        result: AnalysisResult,
+        sheets_info: Dict[str, str],
+        to: str,
+        subject: str,
+    ) -> MIMEMultipart:
+        """HTML 리포트 이메일 메시지 생성 (차트 이미지 포함)"""
+        # 루트 메시지 (related - 이미지 첨부용)
+        msg_root = MIMEMultipart('related')
+        msg_root['to'] = to
+        msg_root['subject'] = subject
+
+        # 대체 콘텐츠 컨테이너 (text/html)
+        msg_alternative = MIMEMultipart('alternative')
+        msg_root.attach(msg_alternative)
+
+        # 플레인 텍스트 버전
+        plain_body = self.create_report_email(result, sheets_info)
+        msg_alternative.attach(MIMEText(plain_body, 'plain', 'utf-8'))
+
+        # HTML 버전
+        html_body = create_html_email(result, sheets_info, has_charts=True)
+        msg_alternative.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+        # 차트 이미지 첨부
+        try:
+            # 해시태그 차트
+            hashtag_chart_data = create_email_hashtag_chart(result.top_hashtags)
+            hashtag_img = MIMEImage(hashtag_chart_data, _subtype='png')
+            hashtag_img.add_header('Content-ID', '<hashtag_chart>')
+            hashtag_img.add_header('Content-Disposition', 'inline', filename='hashtag_chart.png')
+            msg_root.attach(hashtag_img)
+
+            # 카테고리 파이 차트
+            category_chart_data = create_email_category_pie(result.top_hashtags)
+            category_img = MIMEImage(category_chart_data, _subtype='png')
+            category_img.add_header('Content-ID', '<category_chart>')
+            category_img.add_header('Content-Disposition', 'inline', filename='category_chart.png')
+            msg_root.attach(category_img)
+        except Exception as e:
+            # 차트 생성 실패 시 차트 없는 HTML로 대체
+            print(f"  ⚠️ 차트 생성 실패: {e}")
+            html_body_no_charts = create_html_email(result, sheets_info, has_charts=False)
+            # alternative 재구성
+            msg_alternative = MIMEMultipart('alternative')
+            msg_alternative.attach(MIMEText(plain_body, 'plain', 'utf-8'))
+            msg_alternative.attach(MIMEText(html_body_no_charts, 'html', 'utf-8'))
+            msg_root = MIMEMultipart('related')
+            msg_root['to'] = to
+            msg_root['subject'] = subject
+            msg_root.attach(msg_alternative)
+
+        return msg_root
+
     def send_report(
         self,
         result: AnalysisResult,
@@ -160,13 +218,24 @@ class GmailSender:
         results = []
         for recipient in recipients:
             try:
-                send_result = self.send_email(recipient, subject, body)
+                # HTML 이메일 시도
+                try:
+                    msg = self.create_html_report_message(result, sheets_info, recipient, subject)
+                    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+                    send_result = self._get_service().users().messages().send(
+                        userId="me", body={"raw": raw}
+                    ).execute()
+                except Exception as html_err:
+                    # HTML 실패 시 플레인 텍스트로 폴백
+                    print(f"  ⚠️ HTML 이메일 실패, 플레인 텍스트로 전환: {html_err}")
+                    send_result = self.send_email(recipient, subject, body)
+
                 print(f"  ✅ 이메일 전송 완료: {recipient}")
                 results.append({"to": recipient, "success": True, "message_id": send_result.get("id")})
             except Exception as e:
                 print(f"  ❌ 이메일 전송 실패: {recipient} - {e}")
                 results.append({"to": recipient, "success": False, "error": str(e)})
-        
+
         return results
 
 

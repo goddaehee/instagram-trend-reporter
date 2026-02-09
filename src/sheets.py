@@ -12,6 +12,10 @@ from googleapiclient.discovery import build
 from .config import get_config, Config
 from .analyzer import AnalysisResult
 from .credentials import get_token, save_token, get_google_oauth_config, is_cloud_environment
+from .visualization.colors import (
+    SHEETS_HEADER_BG, SHEETS_HEADER_FG, SHEETS_BORDER_COLOR,
+    SHEETS_GRADE_BG, SHEETS_GRADIENT, SHEETS_TAB_COLORS, CATEGORY_COLORS
+)
 
 
 SCOPES = [
@@ -44,6 +48,7 @@ class SheetsReporter:
     def __init__(self, config: Optional[Config] = None):
         self.config = config or get_config()
         self.service = None
+        self._sheet_ids = {}
     
     def _get_credentials(self) -> Credentials:
         """Google 인증 정보 획득"""
@@ -135,6 +140,14 @@ class SheetsReporter:
         
         result = service.spreadsheets().create(body=spreadsheet).execute()
         spreadsheet_id = result["spreadsheetId"]
+
+        # Store sheet IDs for batchUpdate operations
+        self._sheet_ids = {}
+        for sheet in result.get("sheets", []):
+            title = sheet["properties"]["title"]
+            sheet_id = sheet["properties"]["sheetId"]
+            self._sheet_ids[title] = sheet_id
+
         print(f"스프레드시트 생성: {spreadsheet_id}")
         return spreadsheet_id
     
@@ -145,10 +158,400 @@ class SheetsReporter:
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=range_name,
-            valueInputOption="RAW",
+            valueInputOption="USER_ENTERED",
             body=body,
         ).execute()
-    
+
+    def _build_formatting_requests(self, result: AnalysisResult) -> list:
+        """Build batchUpdate requests for formatting, conditional formatting, and charts"""
+        requests = []
+
+        # Sheet name to tab color mapping
+        tab_color_map = {
+            "Top50_해시태그": SHEETS_TAB_COLORS["hashtag"],
+            "Top7_바이럴콘텐츠": SHEETS_TAB_COLORS["viral"],
+            "인사이트": SHEETS_TAB_COLORS["insight"],
+            "부록_용어설명": SHEETS_TAB_COLORS["glossary"],
+            "리포트정보": SHEETS_TAB_COLORS["info"],
+        }
+
+        # Data row counts for each sheet (including header)
+        row_counts = {
+            "Top50_해시태그": len(result.top_hashtags) + 1,
+            "Top7_바이럴콘텐츠": len(result.top_viral) + 1,
+            "인사이트": len(result.insights) + 1,
+            "부록_용어설명": len(self.GLOSSARY),
+            "리포트정보": 11,
+        }
+
+        # Column counts for each sheet
+        col_counts = {
+            "Top50_해시태그": 8,
+            "Top7_바이럴콘텐츠": 8,
+            "인사이트": 4,
+            "부록_용어설명": 4,
+            "리포트정보": 2,
+        }
+
+        for sheet_name, sheet_id in self._sheet_ids.items():
+            # a) Tab colors
+            if sheet_name in tab_color_map:
+                requests.append({
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": sheet_id,
+                            "tabColor": tab_color_map[sheet_name],
+                        },
+                        "fields": "tabColor",
+                    }
+                })
+
+            # b) Frozen header rows
+            requests.append({
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": sheet_id,
+                        "gridProperties": {"frozenRowCount": 1},
+                    },
+                    "fields": "gridProperties.frozenRowCount",
+                }
+            })
+
+            # c) Header formatting (row 0)
+            col_count = col_counts.get(sheet_name, 8)
+            requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": col_count,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": SHEETS_HEADER_BG,
+                            "textFormat": {
+                                "foregroundColor": SHEETS_HEADER_FG,
+                                "bold": True,
+                            },
+                        }
+                    },
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }
+            })
+
+            # d) Borders on all data cells
+            row_count = row_counts.get(sheet_name, 10)
+            requests.append({
+                "updateBorders": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": row_count,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": col_count,
+                    },
+                    "top": {"style": "SOLID", "color": SHEETS_BORDER_COLOR},
+                    "bottom": {"style": "SOLID", "color": SHEETS_BORDER_COLOR},
+                    "left": {"style": "SOLID", "color": SHEETS_BORDER_COLOR},
+                    "right": {"style": "SOLID", "color": SHEETS_BORDER_COLOR},
+                    "innerHorizontal": {"style": "SOLID", "color": SHEETS_BORDER_COLOR},
+                    "innerVertical": {"style": "SOLID", "color": SHEETS_BORDER_COLOR},
+                }
+            })
+
+            # e) Auto-resize columns
+            requests.append({
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": sheet_id,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": col_count,
+                    }
+                }
+            })
+
+        # f) Conditional formatting on Top50_해시태그 sheet
+        hashtag_sheet_id = self._sheet_ids.get("Top50_해시태그")
+        if hashtag_sheet_id is not None:
+            hashtag_row_count = len(result.top_hashtags) + 1
+
+            # Grade column (G, index 6) - Hot
+            requests.append({
+                "addConditionalFormatRule": {
+                    "rule": {
+                        "ranges": [{
+                            "sheetId": hashtag_sheet_id,
+                            "startRowIndex": 1,
+                            "endRowIndex": hashtag_row_count,
+                            "startColumnIndex": 6,
+                            "endColumnIndex": 7,
+                        }],
+                        "booleanRule": {
+                            "condition": {
+                                "type": "TEXT_CONTAINS",
+                                "values": [{"userEnteredValue": "Hot"}],
+                            },
+                            "format": {"backgroundColor": SHEETS_GRADE_BG["hot"]},
+                        },
+                    },
+                    "index": 0,
+                }
+            })
+
+            # Grade column (G, index 6) - Rising
+            requests.append({
+                "addConditionalFormatRule": {
+                    "rule": {
+                        "ranges": [{
+                            "sheetId": hashtag_sheet_id,
+                            "startRowIndex": 1,
+                            "endRowIndex": hashtag_row_count,
+                            "startColumnIndex": 6,
+                            "endColumnIndex": 7,
+                        }],
+                        "booleanRule": {
+                            "condition": {
+                                "type": "TEXT_CONTAINS",
+                                "values": [{"userEnteredValue": "Rising"}],
+                            },
+                            "format": {"backgroundColor": SHEETS_GRADE_BG["rising"]},
+                        },
+                    },
+                    "index": 1,
+                }
+            })
+
+            # Hot score column (F, index 5) - Gradient
+            requests.append({
+                "addConditionalFormatRule": {
+                    "rule": {
+                        "ranges": [{
+                            "sheetId": hashtag_sheet_id,
+                            "startRowIndex": 1,
+                            "endRowIndex": hashtag_row_count,
+                            "startColumnIndex": 5,
+                            "endColumnIndex": 6,
+                        }],
+                        "gradientRule": {
+                            "minpoint": {
+                                "color": SHEETS_GRADIENT["min"],
+                                "type": "MIN",
+                            },
+                            "maxpoint": {
+                                "color": SHEETS_GRADIENT["max"],
+                                "type": "MAX",
+                            },
+                        },
+                    },
+                    "index": 2,
+                }
+            })
+
+        # g) Charts
+        # Bar chart for top 10 hashtags by hot_score on Top50_해시태그
+        if hashtag_sheet_id is not None:
+            requests.append({
+                "addChart": {
+                    "chart": {
+                        "spec": {
+                            "title": "Top 10 핫스코어 해시태그",
+                            "basicChart": {
+                                "chartType": "BAR",
+                                "legendPosition": "NO_LEGEND",
+                                "axis": [
+                                    {"position": "BOTTOM_AXIS", "title": "핫스코어"},
+                                    {"position": "LEFT_AXIS", "title": "해시태그"},
+                                ],
+                                "domains": [{
+                                    "domain": {
+                                        "sourceRange": {
+                                            "sources": [{
+                                                "sheetId": hashtag_sheet_id,
+                                                "startRowIndex": 1,
+                                                "endRowIndex": 11,
+                                                "startColumnIndex": 1,
+                                                "endColumnIndex": 2,
+                                            }]
+                                        }
+                                    }
+                                }],
+                                "series": [{
+                                    "series": {
+                                        "sourceRange": {
+                                            "sources": [{
+                                                "sheetId": hashtag_sheet_id,
+                                                "startRowIndex": 1,
+                                                "endRowIndex": 11,
+                                                "startColumnIndex": 5,
+                                                "endColumnIndex": 6,
+                                            }]
+                                        }
+                                    },
+                                    "color": SHEETS_HEADER_BG,
+                                }],
+                            },
+                        },
+                        "position": {
+                            "overlayPosition": {
+                                "anchorCell": {
+                                    "sheetId": hashtag_sheet_id,
+                                    "rowIndex": 1,
+                                    "columnIndex": 9,
+                                },
+                                "widthPixels": 600,
+                                "heightPixels": 400,
+                            }
+                        },
+                    }
+                }
+            })
+
+            # Pie chart (donut) for category distribution on Top50_해시태그
+            # Category summary data is written at J16, so data starts at row 16 (index 16)
+            category_count = len(set(h.category for h in result.top_hashtags))
+            requests.append({
+                "addChart": {
+                    "chart": {
+                        "spec": {
+                            "title": "카테고리별 분포",
+                            "pieChart": {
+                                "legendPosition": "RIGHT_LEGEND",
+                                "pieHole": 0.4,
+                                "domain": {
+                                    "sourceRange": {
+                                        "sources": [{
+                                            "sheetId": hashtag_sheet_id,
+                                            "startRowIndex": 16,
+                                            "endRowIndex": 17 + category_count,
+                                            "startColumnIndex": 9,
+                                            "endColumnIndex": 10,
+                                        }]
+                                    }
+                                },
+                                "series": {
+                                    "sourceRange": {
+                                        "sources": [{
+                                            "sheetId": hashtag_sheet_id,
+                                            "startRowIndex": 16,
+                                            "endRowIndex": 17 + category_count,
+                                            "startColumnIndex": 10,
+                                            "endColumnIndex": 11,
+                                        }]
+                                    }
+                                },
+                            },
+                        },
+                        "position": {
+                            "overlayPosition": {
+                                "anchorCell": {
+                                    "sheetId": hashtag_sheet_id,
+                                    "rowIndex": 17,
+                                    "columnIndex": 9,
+                                },
+                                "widthPixels": 500,
+                                "heightPixels": 400,
+                            }
+                        },
+                    }
+                }
+            })
+
+        # Column chart for viral content on Top7_바이럴콘텐츠
+        viral_sheet_id = self._sheet_ids.get("Top7_바이럴콘텐츠")
+        if viral_sheet_id is not None:
+            viral_row_count = len(result.top_viral) + 1
+            requests.append({
+                "addChart": {
+                    "chart": {
+                        "spec": {
+                            "title": "바이럴 콘텐츠 비교 (좋아요/댓글/조회수)",
+                            "basicChart": {
+                                "chartType": "COLUMN",
+                                "legendPosition": "BOTTOM_LEGEND",
+                                "axis": [
+                                    {"position": "BOTTOM_AXIS", "title": "계정"},
+                                    {"position": "LEFT_AXIS", "title": "수치"},
+                                ],
+                                "domains": [{
+                                    "domain": {
+                                        "sourceRange": {
+                                            "sources": [{
+                                                "sheetId": viral_sheet_id,
+                                                "startRowIndex": 1,
+                                                "endRowIndex": viral_row_count,
+                                                "startColumnIndex": 1,
+                                                "endColumnIndex": 2,
+                                            }]
+                                        }
+                                    }
+                                }],
+                                "series": [
+                                    {
+                                        "series": {
+                                            "sourceRange": {
+                                                "sources": [{
+                                                    "sheetId": viral_sheet_id,
+                                                    "startRowIndex": 1,
+                                                    "endRowIndex": viral_row_count,
+                                                    "startColumnIndex": 3,
+                                                    "endColumnIndex": 4,
+                                                }]
+                                            }
+                                        },
+                                        "color": SHEETS_TAB_COLORS["hashtag"],
+                                    },
+                                    {
+                                        "series": {
+                                            "sourceRange": {
+                                                "sources": [{
+                                                    "sheetId": viral_sheet_id,
+                                                    "startRowIndex": 1,
+                                                    "endRowIndex": viral_row_count,
+                                                    "startColumnIndex": 4,
+                                                    "endColumnIndex": 5,
+                                                }]
+                                            }
+                                        },
+                                        "color": SHEETS_TAB_COLORS["viral"],
+                                    },
+                                    {
+                                        "series": {
+                                            "sourceRange": {
+                                                "sources": [{
+                                                    "sheetId": viral_sheet_id,
+                                                    "startRowIndex": 1,
+                                                    "endRowIndex": viral_row_count,
+                                                    "startColumnIndex": 5,
+                                                    "endColumnIndex": 6,
+                                                }]
+                                            }
+                                        },
+                                        "color": SHEETS_TAB_COLORS["insight"],
+                                    },
+                                ],
+                                "headerCount": 1,
+                            },
+                        },
+                        "position": {
+                            "overlayPosition": {
+                                "anchorCell": {
+                                    "sheetId": viral_sheet_id,
+                                    "rowIndex": 11,
+                                    "columnIndex": 0,
+                                },
+                                "widthPixels": 800,
+                                "heightPixels": 400,
+                            }
+                        },
+                    }
+                }
+            })
+
+        return requests
+
     def generate_report(self, result: AnalysisResult) -> Dict[str, str]:
         """리포트 생성 및 반환"""
         # 스프레드시트 생성
@@ -169,7 +572,8 @@ class SheetsReporter:
         viral_data = [["순위", "계정", "주제", "좋아요", "댓글", "조회수", "인게이지먼트", "URL"]]
         for v in result.top_viral:
             viral_data.append([
-                v.rank, v.username, v.topic, v.likes, v.comments, v.views, v.engagement, v.url
+                v.rank, v.username, v.topic, v.likes, v.comments, v.views, v.engagement,
+                f'=HYPERLINK("{v.url}", "View Post")'
             ])
         self.write_values(spreadsheet_id, "Top7_바이럴콘텐츠!A1", viral_data)
         print(f"  → Top7_바이럴콘텐츠 시트 작성 완료 ({len(result.top_viral)}개)")
@@ -201,7 +605,26 @@ class SheetsReporter:
         ]
         self.write_values(spreadsheet_id, "리포트정보!A1", report_info)
         print(f"  → 리포트정보 시트 작성 완료")
-        
+
+        # 6. Write category summary for pie chart
+        category_counts = {}
+        for h in result.top_hashtags:
+            category_counts[h.category] = category_counts.get(h.category, 0) + 1
+        summary_data = [["카테고리", "개수"]]
+        for cat, cnt in category_counts.items():
+            name = CATEGORY_COLORS.get(cat, {}).get("name", cat)
+            summary_data.append([name, cnt])
+        self.write_values(spreadsheet_id, "Top50_해시태그!J16", summary_data)
+
+        # 7. Apply all formatting in single batchUpdate
+        requests = self._build_formatting_requests(result)
+        if requests:
+            self._get_service().spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": requests}
+            ).execute()
+            print("  → 서식 및 차트 적용 완료")
+
         # 공개 권한 설정
         self.set_public_permission(spreadsheet_id)
         

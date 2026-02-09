@@ -21,6 +21,15 @@ analysis:
   top_hashtags: 50           # Top 해시태그 개수
   top_viral: 7               # Top 바이럴 콘텐츠 개수
 
+# 스크래퍼 안정성 설정 (선택 - 기본값이 적용됩니다)
+scraper:
+  max_request_retries: 3       # 요청당 재시도 횟수 (Apify 기본 30 → 3 권장)
+  max_concurrency: 5           # 동시 요청 수 (낮을수록 차단 위험 감소)
+  timeout_secs: 300            # 액터 기본 타임아웃 (초)
+  timeout_per_account_secs: 60 # 계정당 추가 타임아웃 (초)
+  max_cost_usd: 2.0            # 실행당 비용 상한선 ($)
+  min_results_threshold: 3     # 최소 결과 수 (이하면 경고)
+
 # 이메일 수신자
 email:
   recipients:

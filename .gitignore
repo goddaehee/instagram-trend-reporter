@@ -7,3 +7,7 @@ config/settings.yaml
 
 # Streamlit secrets
 .streamlit/secrets.toml
+
+# Tool configs
+.omc/
+.serena/

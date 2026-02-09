@@ -8,3 +8,9 @@ pyyaml>=6.0.0
 
 # Streamlit Web App
 streamlit>=1.30.0
+
+# Visualization
+plotly>=5.18.0
+matplotlib>=3.8.0
+wordcloud>=1.9.0
+kaleido>=0.2.1

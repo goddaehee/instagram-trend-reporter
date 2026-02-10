@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import statistics
 
 from .config import get_config, Config
+from .categories import categorize_hashtag, get_topic_emoji, CATEGORY_INFO
 
 
 @dataclass
@@ -59,26 +60,6 @@ class AnalysisResult:
 class InstagramAnalyzer:
     """인스타그램 데이터 분석기"""
     
-    # 카테고리 분류용 키워드
-    CELEB_KEYWORDS = [
-        "jennie", "jisoo", "rose", "lisa", "karina", "winter", "ningning", "giselle",
-        "bts", "뷔", "지민", "태용", "nct", "stray", "아이브", "에스파", "블랙핑크",
-        "제니", "지수", "로제", "닝닝", "카리나", "윈터", "라이즈", "원빈", "레이",
-        "아이유", "뉴진스", "르세라핌", "세븐틴", "투바투"
-    ]
-    BRAND_KEYWORDS = [
-        "샤넬", "디올", "구찌", "프라다", "루이비통", "마뗑킴", "디에디트", "올리브",
-        "휠라", "나이키", "아디다스", "자라", "유니클로", "무신사"
-    ]
-    TREND_KEYWORDS = [
-        "테크", "아이폰", "갤럭시", "iOS", "꿀팁", "업데이트", "AI", "폰", "앱",
-        "틱톡", "숏폼", "릴스", "트렌드"
-    ]
-    ITEM_KEYWORDS = [
-        "코트", "재킷", "아우터", "스카프", "링", "가방", "슈즈", "부츠", "원피스",
-        "청바지", "니트", "후드", "맨투맨"
-    ]
-    
     def __init__(self, config: Optional[Config] = None):
         self.config = config or get_config()
     
@@ -89,20 +70,6 @@ class InstagramAnalyzer:
         comments = post.get("commentsCount", 0) or 0
         views = post.get("videoPlayCount", 0) or 0
         return likes + (comments * 3) + (views * 0.1)
-    
-    def categorize_hashtag(self, tag: str) -> str:
-        """해시태그 카테고리 분류"""
-        tag_lower = tag.lower()
-        
-        if any(kw in tag_lower or kw in tag for kw in self.CELEB_KEYWORDS):
-            return "celeb"
-        elif any(kw in tag for kw in self.BRAND_KEYWORDS):
-            return "brand"
-        elif any(kw in tag for kw in self.TREND_KEYWORDS):
-            return "trend"
-        elif any(kw in tag for kw in self.ITEM_KEYWORDS):
-            return "item"
-        return "general"
     
     def calc_grade(self, hot_score: float, count: int, avg_engagement: float) -> Tuple[str, str]:
         """등급 계산"""
@@ -168,7 +135,7 @@ class InstagramAnalyzer:
         for tag, data in hashtag_data.items():
             avg_eng = data["total_engagement"] / data["count"] if data["count"] > 0 else 0
             hot_score = data["count"] * (avg_eng ** 0.3) if avg_eng > 0 else 0
-            category = self.categorize_hashtag(tag)
+            category = categorize_hashtag(tag)
             grade, reason = self.calc_grade(hot_score, data["count"], avg_eng)
             
             result.append(HashtagStats(
@@ -213,20 +180,29 @@ class InstagramAnalyzer:
         return result
     
     def _generate_topic(self, caption: str, post: Dict[str, Any]) -> str:
-        """캡션에서 주제 추출"""
-        # 간단한 키워드 기반 주제 생성
+        """캡션에서 주제 추출 (카테고리 기반)"""
+        if not caption:
+            return "📌 콘텐츠"
+
+        # 캡션의 해시태그에서 카테고리 판별
+        hashtags = re.findall(r'#(\w+)', caption)
+        for tag in hashtags:
+            cat = categorize_hashtag(tag)
+            if cat != "general":
+                return f"{get_topic_emoji(cat)} {caption[:30]}"
+
+        # 해시태그 없으면 캡션 내 키워드 기반
         caption_lower = caption.lower()
-        
-        if "아이폰" in caption or "iphone" in caption_lower or "ios" in caption_lower:
-            return "📱 " + caption[:30]
-        elif "패션" in caption or "코디" in caption or "옷" in caption:
-            return "👗 " + caption[:30]
-        elif any(kw in caption for kw in ["bts", "방탄", "블랙핑크", "에스파"]):
-            return "🎵 " + caption[:30]
-        elif "뷰티" in caption or "메이크업" in caption:
-            return "💄 " + caption[:30]
-        else:
-            return "✨ " + caption[:30] if caption else "✨ 콘텐츠"
+        keyword_map = [
+            (["패션", "코디", "옷", "fashion", "outfit", "style"], "item"),
+            (["뷰티", "메이크업", "beauty", "makeup", "skincare"], "beauty"),
+            (["여행", "travel", "카페", "cafe"], "lifestyle"),
+        ]
+        for keywords, cat in keyword_map:
+            if any(kw in caption_lower for kw in keywords):
+                return f"{get_topic_emoji(cat)} {caption[:30]}"
+
+        return f"✨ {caption[:30]}"
     
     def generate_insights(self, hashtags: List[HashtagStats], viral: List[ViralContent]) -> List[Insight]:
         """인사이트 자동 생성"""
@@ -242,13 +218,7 @@ class InstagramAnalyzer:
             return insights
 
         # 인사이트 1: Top 해시태그 분석
-        category_names = {
-            "celeb": "셀럽/아이돌",
-            "brand": "브랜드",
-            "trend": "테크/트렌드",
-            "item": "패션 아이템",
-            "general": "일반"
-        }
+        category_names = {cat: info["name"] for cat, info in CATEGORY_INFO.items()}
 
         if hashtags:
             top_tags = [h.tag for h in hashtags[:5]]

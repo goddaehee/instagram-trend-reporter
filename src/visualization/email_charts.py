@@ -131,11 +131,14 @@ def create_email_category_pie(hashtags: List[HashtagStats]) -> bytes:
 
     # 카테고리 이름 매핑
     category_names = {
-        "celeb": "셀럽/아이돌",
+        "celeb": "셀럽/인플루언서",
         "brand": "브랜드",
-        "trend": "테크/트렌드",
         "item": "패션 아이템",
-        "general": "일반"
+        "style": "스타일/무드",
+        "beauty": "뷰티",
+        "lifestyle": "라이프스타일",
+        "event": "이벤트/시즌",
+        "general": "일반",
     }
 
     labels = [category_names.get(cat, cat) for cat in category_counts.keys()]

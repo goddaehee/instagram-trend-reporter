@@ -19,11 +19,14 @@ GRADE_COLORS = {
 
 # ── 카테고리별 색상 ─────────────────────────────────────────────
 CATEGORY_COLORS = {
-    "celeb": {"hex": "#833AB4", "rgb": (0.51, 0.23, 0.71), "name": "셀럽/아이돌"},
-    "brand": {"hex": "#405DE6", "rgb": (0.25, 0.36, 0.90), "name": "브랜드"},
-    "trend": {"hex": "#E1306C", "rgb": (0.88, 0.19, 0.42), "name": "테크/트렌드"},
-    "item": {"hex": "#2ECC71", "rgb": (0.18, 0.80, 0.44), "name": "패션 아이템"},
-    "general": {"hex": "#9E9E9E", "rgb": (0.62, 0.62, 0.62), "name": "일반"},
+    "celeb":     {"hex": "#833AB4", "rgb": (0.51, 0.23, 0.71), "name": "셀럽/인플루언서"},
+    "brand":     {"hex": "#405DE6", "rgb": (0.25, 0.36, 0.90), "name": "브랜드"},
+    "item":      {"hex": "#2ECC71", "rgb": (0.18, 0.80, 0.44), "name": "패션 아이템"},
+    "style":     {"hex": "#E1306C", "rgb": (0.88, 0.19, 0.42), "name": "스타일/무드"},
+    "beauty":    {"hex": "#FF6B9D", "rgb": (1.00, 0.42, 0.62), "name": "뷰티"},
+    "lifestyle": {"hex": "#F39C12", "rgb": (0.95, 0.61, 0.07), "name": "라이프스타일"},
+    "event":     {"hex": "#1ABC9C", "rgb": (0.10, 0.74, 0.61), "name": "이벤트/시즌"},
+    "general":   {"hex": "#9E9E9E", "rgb": (0.62, 0.62, 0.62), "name": "일반"},
 }
 
 # ── Google Sheets용 RGB 딕셔너리 (0~1 범위) ─────────────────────
@@ -60,7 +63,10 @@ PLOTLY_GRADE_COLORS = {
 PLOTLY_CATEGORY_SEQUENCE = [
     CATEGORY_COLORS["celeb"]["hex"],
     CATEGORY_COLORS["brand"]["hex"],
-    CATEGORY_COLORS["trend"]["hex"],
     CATEGORY_COLORS["item"]["hex"],
+    CATEGORY_COLORS["style"]["hex"],
+    CATEGORY_COLORS["beauty"]["hex"],
+    CATEGORY_COLORS["lifestyle"]["hex"],
+    CATEGORY_COLORS["event"]["hex"],
     CATEGORY_COLORS["general"]["hex"],
 ]

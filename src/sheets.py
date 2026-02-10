@@ -49,6 +49,8 @@ class SheetsReporter:
         self.config = config or get_config()
         self.service = None
         self._sheet_ids = {}
+        self._hashtag_tab = "Top50_해시태그"  # Will be set dynamically in generate_report
+        self._viral_tab = "Top7_바이럴콘텐츠"  # Will be set dynamically in generate_report
     
     def _get_credentials(self) -> Credentials:
         """Google 인증 정보 획득"""
@@ -123,15 +125,19 @@ class SheetsReporter:
         
         print("  → 공개 권한 설정 완료 (링크가 있는 모든 사용자 > 뷰어)")
     
-    def create_spreadsheet(self, title: str) -> str:
+    def create_spreadsheet(self, title: str, hashtag_tab: Optional[str] = None, viral_tab: Optional[str] = None) -> str:
         """새 스프레드시트 생성"""
         service = self._get_service()
-        
+
+        # Use provided tab names or fall back to instance variables
+        hashtag_tab_name = hashtag_tab or self._hashtag_tab
+        viral_tab_name = viral_tab or self._viral_tab
+
         spreadsheet = {
             "properties": {"title": title},
             "sheets": [
-                {"properties": {"title": "Top50_해시태그"}},
-                {"properties": {"title": "Top7_바이럴콘텐츠"}},
+                {"properties": {"title": hashtag_tab_name}},
+                {"properties": {"title": viral_tab_name}},
                 {"properties": {"title": "인사이트"}},
                 {"properties": {"title": "부록_용어설명"}},
                 {"properties": {"title": "리포트정보"}},
@@ -168,8 +174,8 @@ class SheetsReporter:
 
         # Sheet name to tab color mapping
         tab_color_map = {
-            "Top50_해시태그": SHEETS_TAB_COLORS["hashtag"],
-            "Top7_바이럴콘텐츠": SHEETS_TAB_COLORS["viral"],
+            self._hashtag_tab: SHEETS_TAB_COLORS["hashtag"],
+            self._viral_tab: SHEETS_TAB_COLORS["viral"],
             "인사이트": SHEETS_TAB_COLORS["insight"],
             "부록_용어설명": SHEETS_TAB_COLORS["glossary"],
             "리포트정보": SHEETS_TAB_COLORS["info"],
@@ -177,8 +183,8 @@ class SheetsReporter:
 
         # Data row counts for each sheet (including header)
         row_counts = {
-            "Top50_해시태그": len(result.top_hashtags) + 1,
-            "Top7_바이럴콘텐츠": len(result.top_viral) + 1,
+            self._hashtag_tab: len(result.top_hashtags) + 1,
+            self._viral_tab: len(result.top_viral) + 1,
             "인사이트": len(result.insights) + 1,
             "부록_용어설명": len(self.GLOSSARY),
             "리포트정보": 11,
@@ -186,8 +192,8 @@ class SheetsReporter:
 
         # Column counts for each sheet
         col_counts = {
-            "Top50_해시태그": 8,
-            "Top7_바이럴콘텐츠": 8,
+            self._hashtag_tab: 8,
+            self._viral_tab: 8,
             "인사이트": 4,
             "부록_용어설명": 4,
             "리포트정보": 2,
@@ -273,8 +279,72 @@ class SheetsReporter:
                 }
             })
 
-        # f) Conditional formatting on Top50_해시태그 sheet
-        hashtag_sheet_id = self._sheet_ids.get("Top50_해시태그")
+        # f) Number formatting for large numbers
+        hashtag_sheet_id = self._sheet_ids.get(self._hashtag_tab)
+        viral_sheet_id = self._sheet_ids.get(self._viral_tab)
+
+        if hashtag_sheet_id is not None:
+            hashtag_row_count = len(result.top_hashtags) + 1
+            # 평균인게이지먼트 (E, index 4) - comma format
+            requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": hashtag_sheet_id,
+                        "startRowIndex": 1,
+                        "endRowIndex": hashtag_row_count,
+                        "startColumnIndex": 4,
+                        "endColumnIndex": 5,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat",
+                }
+            })
+            # 핫스코어 (F, index 5) - one decimal
+            requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": hashtag_sheet_id,
+                        "startRowIndex": 1,
+                        "endRowIndex": hashtag_row_count,
+                        "startColumnIndex": 5,
+                        "endColumnIndex": 6,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {"type": "NUMBER", "pattern": "#,##0.0"}
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat",
+                }
+            })
+
+        if viral_sheet_id is not None:
+            viral_row_count = len(result.top_viral) + 1
+            # 좋아요(D,3), 댓글(E,4), 조회수(F,5), 인게이지먼트(G,6) - comma format
+            for col_idx in [3, 4, 5, 6]:
+                requests.append({
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": viral_sheet_id,
+                            "startRowIndex": 1,
+                            "endRowIndex": viral_row_count,
+                            "startColumnIndex": col_idx,
+                            "endColumnIndex": col_idx + 1,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                            }
+                        },
+                        "fields": "userEnteredFormat.numberFormat",
+                    }
+                })
+
+        # g) Conditional formatting on hashtag sheet
         if hashtag_sheet_id is not None:
             hashtag_row_count = len(result.top_hashtags) + 1
 
@@ -351,7 +421,7 @@ class SheetsReporter:
             })
 
         # g) Charts
-        # Bar chart for top 10 hashtags by hot_score on Top50_해시태그
+        # Bar chart for top 10 hashtags by hot_score on hashtag sheet
         if hashtag_sheet_id is not None:
             requests.append({
                 "addChart": {
@@ -409,7 +479,7 @@ class SheetsReporter:
                 }
             })
 
-            # Pie chart (donut) for category distribution on Top50_해시태그
+            # Pie chart (donut) for category distribution on hashtag sheet
             # Category summary data is written at J16, so data starts at row 16 (index 16)
             category_count = len(set(h.category for h in result.top_hashtags))
             requests.append({
@@ -459,8 +529,7 @@ class SheetsReporter:
                 }
             })
 
-        # Column chart for viral content on Top7_바이럴콘텐츠
-        viral_sheet_id = self._sheet_ids.get("Top7_바이럴콘텐츠")
+        # Column chart for viral content on viral sheet
         if viral_sheet_id is not None:
             viral_row_count = len(result.top_viral) + 1
             requests.append({
@@ -554,29 +623,33 @@ class SheetsReporter:
 
     def generate_report(self, result: AnalysisResult) -> Dict[str, str]:
         """리포트 생성 및 반환"""
+        # Set dynamic tab names based on actual data counts
+        self._hashtag_tab = f"Top{len(result.top_hashtags)}_해시태그"
+        self._viral_tab = f"Top{len(result.top_viral)}_바이럴콘텐츠"
+
         # 스프레드시트 생성
         date_str = datetime.now().strftime("%Y-%m-%d")
         title = f"인스타그램_트렌드_리포트_{date_str}"
-        spreadsheet_id = self.create_spreadsheet(title)
+        spreadsheet_id = self.create_spreadsheet(title, self._hashtag_tab, self._viral_tab)
         
-        # 1. Top50_해시태그
+        # 1. Hashtag sheet (dynamic name based on data count)
         hashtag_data = [["순위", "키워드", "카테고리", "빈도", "평균인게이지먼트", "핫스코어", "등급", "등급근거"]]
         for i, h in enumerate(result.top_hashtags, 1):
             hashtag_data.append([
                 i, h.tag, h.category, h.count, h.avg_engagement, h.hot_score, h.grade, h.grade_reason
             ])
-        self.write_values(spreadsheet_id, "Top50_해시태그!A1", hashtag_data)
-        print(f"  → Top50_해시태그 시트 작성 완료 ({len(result.top_hashtags)}개)")
+        self.write_values(spreadsheet_id, f"{self._hashtag_tab}!A1", hashtag_data)
+        print(f"  → {self._hashtag_tab} 시트 작성 완료 ({len(result.top_hashtags)}개)")
         
-        # 2. Top7_바이럴콘텐츠
+        # 2. Viral content sheet (dynamic name based on data count)
         viral_data = [["순위", "계정", "주제", "좋아요", "댓글", "조회수", "인게이지먼트", "URL"]]
         for v in result.top_viral:
             viral_data.append([
                 v.rank, v.username, v.topic, v.likes, v.comments, v.views, v.engagement,
                 f'=HYPERLINK("{v.url}", "View Post")'
             ])
-        self.write_values(spreadsheet_id, "Top7_바이럴콘텐츠!A1", viral_data)
-        print(f"  → Top7_바이럴콘텐츠 시트 작성 완료 ({len(result.top_viral)}개)")
+        self.write_values(spreadsheet_id, f"{self._viral_tab}!A1", viral_data)
+        print(f"  → {self._viral_tab} 시트 작성 완료 ({len(result.top_viral)}개)")
         
         # 3. 인사이트
         insight_data = [["번호", "인사이트 제목", "상세 설명", "관련 키워드"]]
@@ -614,7 +687,7 @@ class SheetsReporter:
         for cat, cnt in category_counts.items():
             name = CATEGORY_COLORS.get(cat, {}).get("name", cat)
             summary_data.append([name, cnt])
-        self.write_values(spreadsheet_id, "Top50_해시태그!J16", summary_data)
+        self.write_values(spreadsheet_id, f"{self._hashtag_tab}!J16", summary_data)
 
         # 7. Apply all formatting in single batchUpdate
         requests = self._build_formatting_requests(result)

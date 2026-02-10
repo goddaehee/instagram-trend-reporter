@@ -42,8 +42,9 @@ def create_html_email(result: AnalysisResult, sheets_info: Dict[str, str], has_c
 
     # 바이럴 콘텐츠 테이블 행
     viral_rows = ""
-    for i, v in enumerate(result.top_viral[:7]):
+    for i, v in enumerate(result.top_viral):
         bg = "#f9f9f9" if i % 2 == 0 else "#ffffff"
+        link_html = f'<a href="{v.url}" style="color: {INSTAGRAM_COLORS["pink"]}; text-decoration: none; font-weight: 500;">View</a>' if v.url else ""
         viral_rows += f'''
             <tr style="background-color: {bg};">
                 <td style="padding: 10px 8px; border-bottom: 1px solid #eeeeee; text-align: center; font-weight: bold; color: {INSTAGRAM_COLORS['pink']};">{v.rank}</td>
@@ -51,6 +52,7 @@ def create_html_email(result: AnalysisResult, sheets_info: Dict[str, str], has_c
                 <td style="padding: 10px 8px; border-bottom: 1px solid #eeeeee;">{v.topic[:30]}</td>
                 <td style="padding: 10px 8px; border-bottom: 1px solid #eeeeee; text-align: right;">{v.views:,}</td>
                 <td style="padding: 10px 8px; border-bottom: 1px solid #eeeeee; text-align: right;">{v.likes:,}</td>
+                <td style="padding: 10px 8px; border-bottom: 1px solid #eeeeee; text-align: center;">{link_html}</td>
             </tr>'''
 
     # 인사이트 카드
@@ -155,7 +157,7 @@ def create_html_email(result: AnalysisResult, sheets_info: Dict[str, str], has_c
                     <tr>
                         <td style="padding: 20px 30px;">
                             <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #333333; border-bottom: 2px solid {INSTAGRAM_COLORS['orange']}; padding-bottom: 8px;">
-                                바이럴 콘텐츠 Top 7
+                                바이럴 콘텐츠 Top {viral_count}
                             </h2>
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
                                 <tr style="background-color: #333333;">
@@ -164,6 +166,7 @@ def create_html_email(result: AnalysisResult, sheets_info: Dict[str, str], has_c
                                     <th style="padding: 10px 8px; color: #ffffff; font-size: 12px; text-align: left;">주제</th>
                                     <th style="padding: 10px 8px; color: #ffffff; font-size: 12px; text-align: right;">조회수</th>
                                     <th style="padding: 10px 8px; color: #ffffff; font-size: 12px; text-align: right;">좋아요</th>
+                                    <th style="padding: 10px 8px; color: #ffffff; font-size: 12px; text-align: center;">링크</th>
                                 </tr>
                                 {viral_rows}
                             </table>

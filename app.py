@@ -72,6 +72,34 @@ _DEFAULT_EXCLUDE_CELEB = [
     "유재석", "강호동", "신동엽", "김구라", "박명수", "하하",
     "조세호", "양세형", "양세찬", "이수근", "김종민", "김종국",
     "지석진", "전소민", "장성규", "전현무", "박진영",
+    # 영문 이름 (로마자 표기)
+    "jennie", "jenniekim", "kimjennie", "jisoo", "lisa", "rose", "rosé",
+    "블랙핑크", "블핑", "방탄소년단",
+    "blackpink", "bts", "nct", "nct127", "nctdream", "exo",
+    "straykids", "skz", "riize", "ive", "aespa", "newjeans",
+    "lesserafim", "itzy", "txt", "enhypen", "seventeen", "svt",
+    "treasure", "ateez", "gidle", "stayc", "nmixx",
+    "taeyong", "karina", "winter", "ningning", "giselle",
+    "wonyoung", "yujin", "minji", "hanni", "danielle", "haerin",
+    "hansohee", "kimtaeri", "suzy", "zendaya",
+    # 추가 인물
+    "차정원", "변우석", "김제니", "이영지", "최미나수",
+    "저스틴비버", "justinbieber", "비버부부",
+    "김나영", "문가영", "기안84", "제니김", "도겸",
+    "브르노마스", "brunomars",
+    "kimgoeun", "lisalisa",
+    "이영애", "하정우", "hajeongwoo",
+    # ENHYPEN 멤버
+    "희승", "제이크", "선우", "니키",
+    "heeseung", "sunoo", "jake",
+    # Stray Kids 멤버
+    "필릭스", "현진",
+    "felix", "hyunjin", "bangchan",
+    # 기타 영문
+    "lalisa", "bts완전체",
+    # 엔터테인먼트/프로그램
+    "솔로지옥", "솔로지옥5", "그래미어워드", "그래미",
+    "십오야", "경찰과도둑",
 ]
 
 from src.config import Config, get_config

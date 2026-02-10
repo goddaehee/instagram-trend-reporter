@@ -117,7 +117,7 @@ class GmailSender:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {sheets_info['url']}
 
-(시트 구성: Top50_해시태그 / Top7_바이럴콘텐츠 / 인사이트 / 부록_용어설명 / 리포트정보)
+(시트 구성: Top{len(result.top_hashtags)}_해시태그 / Top{len(result.top_viral)}_바이럴콘텐츠 / 인사이트 / 부록_용어설명 / 리포트정보)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 갓댐봇 🐻
@@ -212,7 +212,8 @@ class GmailSender:
         if recipients is None:
             recipients = self.config.email_recipients
         
-        subject = f"📊 인스타그램 주간 트렌드 리포트 ({result.analysis_period.split('~')[1].strip()})"
+        top_tag = result.top_hashtags[0].tag if result.top_hashtags else ""
+        subject = f"📊 핫 키워드: {top_tag} | 인스타그램 트렌드 리포트 ({result.analysis_period.split('~')[1].strip()})"
         body = self.create_report_email(result, sheets_info)
         
         results = []

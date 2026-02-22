@@ -16,8 +16,9 @@ DEFAULT_ACCOUNTS = [
 ]
 
 DEFAULT_EMAIL_RECIPIENTS = [
-    "dedurox@gmail.com",
-    "kimdh@lfcorp.com",
+    addr.strip()
+    for addr in os.environ.get("DEFAULT_EMAIL_RECIPIENTS", "").split(",")
+    if addr.strip()
 ]
 
 

@@ -2,7 +2,7 @@
 from typing import Dict
 
 from ..analyzer import AnalysisResult
-from .colors import GRADE_COLORS, CATEGORY_COLORS, INSTAGRAM_COLORS
+from .colors import GRADE_COLORS, INSTAGRAM_COLORS
 
 
 def create_html_email(result: AnalysisResult, sheets_info: Dict[str, str], has_charts: bool = True) -> str:
@@ -71,7 +71,7 @@ def create_html_email(result: AnalysisResult, sheets_info: Dict[str, str], has_c
     # 차트 이미지 섹션
     chart_section = ""
     if has_charts:
-        chart_section = f'''
+        chart_section = '''
             <tr>
                 <td style="padding: 20px 30px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">

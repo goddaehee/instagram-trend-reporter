@@ -3,11 +3,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from dataclasses import asdict
 
 from .config import get_config, Config
 from .fetcher import fetch_instagram_data
-from .analyzer import analyze_instagram_data, AnalysisResult
+from .analyzer import analyze_instagram_data
 from .sheets import create_sheets_report
 from .mailer import send_report_email
 

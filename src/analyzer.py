@@ -1,11 +1,9 @@
 """인스타그램 데이터 분석 모듈"""
 import re
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
-import statistics
-
 from .config import get_config, Config
 from .categories import categorize_hashtag, get_topic_emoji, CATEGORY_INFO
 
@@ -298,7 +296,6 @@ class InstagramAnalyzer:
             if self.config.analysis.start_date and self.config.analysis.end_date:
                 period = f"{self.config.analysis.start_date} ~ {self.config.analysis.end_date}"
             else:
-                from datetime import timedelta
                 days = metadata.get("days", self.config.analysis.days)
                 end_date = datetime.now()
                 start_date = end_date - timedelta(days=days)
@@ -334,7 +331,6 @@ class InstagramAnalyzer:
         if self.config.analysis.start_date and self.config.analysis.end_date:
             period = f"{self.config.analysis.start_date} ~ {self.config.analysis.end_date}"
         else:
-            from datetime import timedelta
             days = metadata.get("days", self.config.analysis.days)
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)

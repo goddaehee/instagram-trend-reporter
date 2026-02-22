@@ -1,0 +1,65 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  syntax-and-quality:
+    name: Syntax & Quality Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install check tools
+        run: pip install pyflakes
+
+      - name: Syntax check (py_compile)
+        run: |
+          echo "=== Syntax Check ==="
+          python -m py_compile src/analyzer.py
+          python -m py_compile src/config.py
+          python -m py_compile src/reporter.py
+          python -m py_compile src/fetcher.py
+          python -m py_compile src/mailer.py
+          python -m py_compile src/credentials.py
+          echo "✅ All files passed syntax check"
+
+      - name: Unused import check (pyflakes)
+        run: |
+          echo "=== Pyflakes Check ==="
+          python -m pyflakes src/
+          echo "✅ No unused imports or undefined names"
+
+      - name: Grade logic regression test
+        run: |
+          echo "=== Grade Logic Test ==="
+          python - <<'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          from src.config import get_config
+          from src.analyzer import InstagramAnalyzer
+
+          cfg = get_config()
+          analyzer = InstagramAnalyzer(cfg)
+
+          # hot_score=80 → must be "🔥 Hot"
+          grade, reason = analyzer.calc_grade(hot_score=80, count=5, avg_engagement=200000)
+          assert grade == "🔥 Hot", f"FAIL: hot_score=80 got '{grade}', expected '🔥 Hot'"
+
+          # hot_score=30 → must be "📈 Rising"
+          grade, reason = analyzer.calc_grade(hot_score=30, count=2, avg_engagement=10000)
+          assert grade == "📈 Rising", f"FAIL: hot_score=30 got '{grade}', expected '📈 Rising'"
+
+          # hot_score=10 → must be "⚪ Stable"
+          grade, reason = analyzer.calc_grade(hot_score=10, count=1, avg_engagement=5000)
+          assert grade == "⚪ Stable", f"FAIL: hot_score=10 got '{grade}', expected '⚪ Stable'"
+
+          print("✅ Grade logic: Hot / Rising / Stable all correct")
+          EOF

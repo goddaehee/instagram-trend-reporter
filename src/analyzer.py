@@ -2,7 +2,7 @@
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 import statistics
 
@@ -298,7 +298,6 @@ class InstagramAnalyzer:
             if self.config.analysis.start_date and self.config.analysis.end_date:
                 period = f"{self.config.analysis.start_date} ~ {self.config.analysis.end_date}"
             else:
-                from datetime import timedelta
                 days = metadata.get("days", self.config.analysis.days)
                 end_date = datetime.now()
                 start_date = end_date - timedelta(days=days)
@@ -334,7 +333,6 @@ class InstagramAnalyzer:
         if self.config.analysis.start_date and self.config.analysis.end_date:
             period = f"{self.config.analysis.start_date} ~ {self.config.analysis.end_date}"
         else:
-            from datetime import timedelta
             days = metadata.get("days", self.config.analysis.days)
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)

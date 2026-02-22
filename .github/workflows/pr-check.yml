@@ -18,7 +18,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install check tools
-        run: pip install pyflakes
+        run: pip install pyflakes pyyaml
 
       - name: Syntax check (py_compile)
         run: |

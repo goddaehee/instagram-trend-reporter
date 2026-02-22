@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List
 
 from .config import get_config, Config
 from .fetcher import fetch_instagram_data
-from .analyzer import analyze_instagram_data, AnalysisResult
+from .analyzer import analyze_instagram_data
 from .sheets import create_sheets_report
 from .mailer import send_report_email
 

@@ -1,9 +1,7 @@
 """Google Sheets 리포트 생성 모듈"""
 import json
-import os
 from datetime import datetime
-from typing import Optional, Dict, Any
-import yaml
+from typing import Optional, Dict
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -677,7 +675,7 @@ class SheetsReporter:
             ["인게이지먼트 공식", "좋아요 + (댓글 × 3) + (조회수 × 0.1)"],
         ]
         self.write_values(spreadsheet_id, "리포트정보!A1", report_info)
-        print(f"  → 리포트정보 시트 작성 완료")
+        print("  → 리포트정보 시트 작성 완료")
 
         # 6. Write category summary for pie chart
         category_counts = {}

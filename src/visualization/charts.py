@@ -34,10 +34,8 @@ if _KR_FONT:
     matplotlib.rcParams['axes.unicode_minus'] = False
 from .colors import (
     INSTAGRAM_COLORS,
-    GRADE_COLORS,
     CATEGORY_COLORS,
     PLOTLY_GRADE_COLORS,
-    PLOTLY_CATEGORY_SEQUENCE,
 )
 
 # 공통 레이아웃 설정
